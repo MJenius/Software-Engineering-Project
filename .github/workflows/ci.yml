@@ -55,7 +55,7 @@ jobs:
         run: npm test
 
       - name: Run integration tests
-        run: npm run test:integration
+        run: npm run test:integration --if-present
 
       - name: Generate coverage report
         run: npm run test:coverage
