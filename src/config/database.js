@@ -10,7 +10,9 @@ const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('❌ Database connection error:', err);
   } else {
-    console.log('✓ Connected to SQLite database');
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('✓ Connected to SQLite database');
+    }
   }
 });
 
@@ -31,9 +33,9 @@ db.serialize(() => {
       is_active INTEGER DEFAULT 1
     )
   `, (err) => {
-    if (err) {
+    if (err && process.env.NODE_ENV !== 'test') {
       console.error('❌ Error creating users table:', err);
-    } else {
+    } else if (!err && process.env.NODE_ENV !== 'test') {
       console.log('✓ Users table initialized');
     }
   });
