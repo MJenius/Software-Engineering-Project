@@ -98,6 +98,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+// Error handling for malformed JSON (SMMS-SR-003: Input validation)
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    logger.warn('Malformed JSON received', { error: err.message, url: req.url });
+    return res.status(400).json({ error: 'Invalid JSON format' });
+  }
+  next(err);
+});
+
 // Session configuration (SMMS-SR-002: 15 minute timeout)
 app.use(
   session({
