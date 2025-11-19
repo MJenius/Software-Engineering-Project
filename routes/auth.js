@@ -190,8 +190,9 @@ router.post(
 
       if (!passwordMatch) {
         logger.warn('Failed login attempt - incorrect password', { email, userId: user.id });
-        return res.status(401).json({
-          error: 'Invalid email or password.'
+        return res.status(401).render('login', {
+          errors: [{ msg: 'Invalid email or password.' }],
+          registered: false,
         });
       }
 
