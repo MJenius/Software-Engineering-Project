@@ -49,13 +49,15 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 const db = require('./database');
-const logger = require('./utils/logger');
+const logger = require('./shared/logging/logger');
 const envCheck = require('./utils/envCheck');
-const authRoutes = require('./routes/auth');
-const postRoutes = require('./routes/posts');
-const adminRoutes = require('./routes/admin');
-const dashboardRoutes = require('./routes/dashboard');
-const analyticsRoutes = require('./routes/analytics');
+const authRoutes = require('./features/auth/routes');
+const postRoutes = require('./features/posts/routes');
+const adminRoutes = require('./features/admin/routes');
+const dashboardRoutes = require('./features/dashboard/routes');
+const analyticsRoutes = require('./features/analytics/routes');
+const { isAuthenticated, isAdmin } = require('./features/auth/middleware');
+const scheduler = require('./features/scheduler');
 
 // Validate environment configuration
 envCheck.checkEnvironment();
@@ -107,21 +109,21 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
-// Session configuration (SMMS-SR-002: 15 minute timeout)
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-    resave: false,
-    saveUninitialized: false, // Don't create session until something is stored
-    rolling: true, // Reset expiration on every response
-    cookie: {
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      httpOnly: true, // Prevent XSS attacks
-      maxAge: 15 * 60 * 1000, // 15 minutes session timeout (SMMS-SR-002)
-      sameSite: 'strict', // CSRF protection
-    },
-  })
-);
+// Authentication middleware (SMMS-SR-004)
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false, // Don't create session until something is stored
+  rolling: true, // Reset expiration on every response
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+    httpOnly: true, // Prevent XSS attacks
+    maxAge: 15 * 60 * 1000, // 15 minutes session timeout (SMMS-SR-002)
+    sameSite: 'strict', // CSRF protection
+  },
+};
+
+app.use(session(sessionConfig));
 
 // Session activity tracking middleware (SMMS-SR-002)
 app.use((req, res, next) => {
@@ -146,46 +148,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Authentication middleware (SMMS-SR-004)
-const isAuthenticated = (req, res, next) => {
+// Session activity tracking middleware (SMMS-SR-002)
+app.use((req, res, next) => {
   if (req.session && req.session.userId) {
-    // Check session timeout (SMMS-SR-002)
-    const now = Date.now();
-    const lastActivity = req.session.lastActivity || now;
-    const sessionAge = now - lastActivity;
-    const maxAge = 15 * 60 * 1000; // 15 minutes
-
-    if (sessionAge > maxAge) {
-      logger.warn('Session expired', { userId: req.session.userId, sessionAge });
-      req.session.destroy((err) => {
-        if (err) logger.error('Session destroy error', { error: err.message });
-      });
-      req.session.error_msg = 'Your session has expired. Please log in again.';
-      return res.redirect('/auth/login');
-    }
-
-    // Update last activity
-    req.session.lastActivity = now;
-    next();
-  } else {
-    res.redirect('/auth/login');
+    req.session.lastActivity = Date.now();
   }
-};
-
-const isAdmin = (req, res, next) => {
-  if (req.session && req.session.userId && req.session.userRole === 'admin') {
-    next();
-  } else {
-    logger.security('Unauthorized admin access attempt', {
-      userId: req.session?.userId,
-      userRole: req.session?.userRole,
-      url: req.url,
-    });
-    return res.status(403).render('error', { 
-      message: 'Access Denied: Admin privileges required.' 
-    });
-  }
-};
+  next();
+});
 
 // Routes
 app.use('/auth', authRoutes);
@@ -256,6 +225,9 @@ app.use((err, req, res, next) => {
 
 // Initialize database and start server
 db.initialize().then(() => {
+  // Start background scheduler (SMMS-F-009)
+  scheduler.startScheduler();
+
   app.listen(PORT, () => {
     logger.info('SMMS Server started', {
       port: PORT,
@@ -271,98 +243,6 @@ db.initialize().then(() => {
   logger.error('Failed to initialize database', { error: err.message, stack: err.stack });
   console.error('Failed to initialize database:', err);
   process.exit(1);
-});
-
-// Auto-publish scheduler: runs every 10 seconds and publishes posts whose scheduled_time has passed
-// This provides a responsive server-side scheduler so posts are published precisely when the time arrives.
-setInterval(async () => {
-  try {
-    const now = new Date();
-    // Format current time as YYYY-MM-DDTHH:MM:SS (local time, no timezone)
-    const pad = (n) => String(n).padStart(2, '0');
-    const localNow = `${pad(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    
-    // Get all scheduled posts for debug logging
-    const scheduledPosts = await db.all(
-      `SELECT id, title, scheduled_time, status FROM posts WHERE status = 'scheduled' ORDER BY scheduled_time ASC`
-    );
-    
-    if (scheduledPosts && scheduledPosts.length > 0) {
-      console.log(`[Scheduler] Current server time (local): ${localNow}`);
-      console.log(`[Scheduler] Checking ${scheduledPosts.length} scheduled post(s):`);
-      scheduledPosts.forEach(post => {
-        const isPast = post.scheduled_time <= localNow;
-        console.log(
-          `  - Post ${post.id} "${post.title}": scheduled_time=${post.scheduled_time}, ready=${isPast}`
-        );
-      });
-    }
-    
-    // Compare as strings since we're storing local time as ISO string
-    // Only publish if the scheduled time is actually in the past (not just equal due to seconds truncation)
-    const result = await db.run(
-      `UPDATE posts SET status = 'published', published_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-       WHERE status = 'scheduled' AND scheduled_time <= ?`,
-      [localNow]
-    );
-
-    if (result && result.changes && result.changes > 0) {
-      console.log(`[Scheduler] ✓ Auto-published ${result.changes} post(s) at ${new Date().toISOString()}`);
-      logger.info('Auto-published scheduled posts', {
-        count: result.changes,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  } catch (err) {
-    console.error('[Scheduler] Auto-publish error:', err);
-    logger.error('Scheduler auto-publish error', { error: err.message });
-  }
-}, 10 * 1000); // Check every 10 seconds for more responsive publishing (SMMS-F-009)
-
-// Debug endpoint: manually check scheduler status and trigger publish
-app.get('/debug/scheduler', async (req, res) => {
-  try {
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const localNow = `${pad(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    
-    console.log(`[Debug] Manual scheduler check at ${now.toISOString()}`);
-    console.log(`[Debug] Local time string: ${localNow}`);
-    
-    // Get all scheduled posts
-    const scheduledPosts = await db.all(
-      `SELECT id, title, scheduled_time, status FROM posts WHERE status = 'scheduled' ORDER BY scheduled_time ASC`
-    );
-    
-    console.log(`[Debug] Found ${scheduledPosts.length} scheduled posts`);
-    scheduledPosts.forEach(post => {
-      const isPast = post.scheduled_time <= localNow;
-      console.log(
-        `  - Post ${post.id}: scheduled=${post.scheduled_time}, isPast=${isPast}`
-      );
-    });
-    
-    // Manually run the update query
-    const result = await db.run(
-      `UPDATE posts SET status = 'published', published_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-       WHERE status = 'scheduled' AND scheduled_time <= ?`,
-      [localNow]
-    );
-    
-    console.log(`[Debug] Published ${result.changes} posts in this manual trigger`);
-    
-    res.json({
-      currentTime: now.toISOString(),
-      localTimeString: localNow,
-      scheduledPostsCount: scheduledPosts.length,
-      scheduledPosts: scheduledPosts,
-      publishResult: result,
-      message: `Server time is ${now.toISOString()} (local: ${localNow}). Check console logs for details.`
-    });
-  } catch (err) {
-    console.error('[Debug] Scheduler check error:', err);
-    res.status(500).json({ error: err.message });
-  }
 });
 
 module.exports = app;
