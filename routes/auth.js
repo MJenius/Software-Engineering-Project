@@ -170,7 +170,7 @@ router.post(
 
       if (!user) {
         logger.warn('Login attempt with non-existent email', { email });
-        return res.render('login', {
+        return res.status(401).render('login', {
           errors: [{ msg: 'Invalid email or password.' }],
           registered: false,
         });
