@@ -695,6 +695,114 @@ DELETE /admin/backup/:fileName  - Delete backup
 
 ---
 
+## 📊 Code Coverage
+
+The project includes comprehensive test coverage to ensure code quality and reliability.
+
+### Current Coverage Statistics
+
+- **Lines:** 76.79% (450/586)
+- **Statements:** 76.74% (452/589)
+- **Functions:** 79.26% (65/82)
+- **Branches:** 60.77% (110/181)
+
+### Running Tests with Coverage
+
+**Run all tests with coverage report:**
+```bash
+npm test
+```
+
+This command will:
+1. Run all 89 test cases using Jest
+2. Generate coverage metrics
+3. Create an HTML coverage report
+
+### Viewing the Coverage Report
+
+After running `npm test`, open the HTML coverage report:
+
+**Location:** `coverage/index.html`
+
+**To view:**
+- Double-click the file in Windows Explorer, or
+- Open it in your browser: `file:///path/to/project/coverage/index.html`
+
+The interactive HTML report shows:
+- 🟢 **Green lines** - Covered by tests
+- 🔴 **Red lines** - Not covered by tests
+- 🟡 **Yellow lines** - Partially covered branches
+- **Drill-down capability** - Click on folders/files to see line-by-line coverage
+
+### Test Suites
+
+The project includes 12 test suites covering:
+
+1. **Integration Tests:**
+   - `tests/auth.test.js` - Authentication flows (register, login, logout)
+   - `tests/posts.test.js` - Post management (create, edit, delete, drafts)
+   - `tests/admin.test.js` - Admin dashboard and user management
+   - `tests/health.integration.test.js` - Health check endpoints
+
+2. **Unit Tests:**
+   - `tests/unit.test.js` - Post and user models
+   - `tests/middleware.test.js` - Authentication and authorization middleware
+   - `tests/posts.routes.test.js` - Post route handlers
+   - `tests/admin.routes.test.js` - Admin route handlers
+   - `tests/additional_unit.test.js` - Backup, analytics, and scheduler logic
+   - `tests/publishers.test.js` - Scheduler publisher logic
+   - `tests/analytics.routes.test.js` - Analytics route handlers
+   - `tests/scheduler.test.js` - Background scheduler functionality
+
+### Coverage by Module
+
+| Module | Line Coverage | Status |
+|--------|--------------|--------|
+| `features/admin/backup.js` | 100% | ✅ Excellent |
+| `features/analytics/queries.js` | 100% | ✅ Excellent |
+| `features/analytics/routes.js` | 100% | ✅ Excellent |
+| `features/scheduler/index.js` | 100% | ✅ Excellent |
+| `features/auth/middleware.js` | 95.45% | ✅ Excellent |
+| `features/dashboard/routes.js` | 84.61% | ✅ Good |
+| `features/posts/models.js` | 82.85% | ✅ Good |
+| `features/posts/routes.js` | 76.33% | ✅ Good |
+| `features/auth/routes.js` | 69.51% | ⚠️ Acceptable |
+| `features/admin/routes.js` | 66.03% | ⚠️ Acceptable |
+| `features/admin/users.js` | 64.81% | ⚠️ Acceptable |
+
+### Running Specific Tests
+
+```bash
+# Run a specific test file
+npx jest tests/auth.test.js
+
+# Run tests matching a pattern
+npx jest --testNamePattern="should create post"
+
+# Run tests in watch mode
+npx jest --watch
+
+# Run tests without coverage
+npx jest --no-coverage
+```
+
+### Test Configuration
+
+Tests are configured in `jest.config.js`:
+- **Test Environment:** Node.js
+- **Coverage Collection:** `features/**/*.js` (excluding config files)
+- **Test Timeout:** 10 seconds
+- **Setup File:** `tests/setup.js` (initializes in-memory database)
+
+### Continuous Integration
+
+All tests run automatically on every commit to ensure:
+- No regressions are introduced
+- Code coverage remains above 70%
+- All critical paths are tested
+
+---
+
 ## 🧪 Testing Guide
 
 ### Test Data Setup

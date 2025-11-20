@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const bcrypt = require('bcrypt');
 
-const DB_PATH = path.join(__dirname, 'smms.db');
+const DB_PATH = process.env.NODE_ENV === 'test' ? ':memory:' : path.join(__dirname, 'smms.db');
 const db = new sqlite3.Database(DB_PATH);
 
 /**

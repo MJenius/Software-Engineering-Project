@@ -177,9 +177,9 @@ app.get('/health', async (req, res) => {
   try {
     // Check database connection
     await db.get('SELECT 1');
-    
+
     const config = envCheck.getConfigSummary();
-    
+
     res.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -204,8 +204,8 @@ app.get('/health', async (req, res) => {
 
 // 404 Error handler
 app.use((req, res) => {
-  res.status(404).render('error', { 
-    message: 'Page not found' 
+  res.status(404).render('error', {
+    message: 'Page not found'
   });
 });
 
@@ -218,31 +218,33 @@ app.use((err, req, res, next) => {
     method: req.method,
     userId: req.session?.userId,
   });
-  res.status(500).render('error', { 
-    message: 'An internal server error occurred.' 
+  res.status(500).render('error', {
+    message: 'An internal server error occurred.'
   });
 });
 
 // Initialize database and start server
-db.initialize().then(() => {
-  // Start background scheduler (SMMS-F-009)
-  scheduler.startScheduler();
+if (require.main === module) {
+  db.initialize().then(() => {
+    // Start background scheduler (SMMS-F-009)
+    scheduler.startScheduler();
 
-  app.listen(PORT, () => {
-    logger.info('SMMS Server started', {
-      port: PORT,
-      url: `http://localhost:${PORT}`,
-      sessionTimeout: '15 minutes',
-      environment: process.env.NODE_ENV || 'development',
+    app.listen(PORT, () => {
+      logger.info('SMMS Server started', {
+        port: PORT,
+        url: `http://localhost:${PORT}`,
+        sessionTimeout: '15 minutes',
+        environment: process.env.NODE_ENV || 'development',
+      });
+      console.log(`SMMS Server running on http://localhost:${PORT}`);
+      console.log('Session timeout: 15 minutes');
+      console.log('Security features enabled: Rate limiting, XSS protection, SQL injection prevention');
     });
-    console.log(`SMMS Server running on http://localhost:${PORT}`);
-    console.log('Session timeout: 15 minutes');
-    console.log('Security features enabled: Rate limiting, XSS protection, SQL injection prevention');
+  }).catch(err => {
+    logger.error('Failed to initialize database', { error: err.message, stack: err.stack });
+    console.error('Failed to initialize database:', err);
+    process.exit(1);
   });
-}).catch(err => {
-  logger.error('Failed to initialize database', { error: err.message, stack: err.stack });
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
-});
+}
 
 module.exports = app;

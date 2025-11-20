@@ -9,9 +9,8 @@ module.exports = {
     '**/?(*.)+(spec|test).js'
   ],
   collectCoverageFrom: [
-    'src/**/*.js',
-    '!src/index.js',
-    '!src/config/database.js'
+    'features/**/*.js',
+    '!features/**/config.js'
   ],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   testTimeout: 10000,
